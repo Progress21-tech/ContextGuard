@@ -33,6 +33,7 @@ export const App: React.FC = () => {
   const [checkingAuth, setCheckingAuth] = useState(true);
 
   const [activeTab, setActiveTab] = useState<'workspace' | 'audit' | 'security' | 'offline' | 'integrations'>('workspace');
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   
   const [users, setUsers] = useState<User[]>([]);
   const [patients, setPatients] = useState<Patient[]>([]);
@@ -126,6 +127,11 @@ export const App: React.FC = () => {
     await logout();
     setCurrentUser(null);
     showToast('Signed out of ContextGuard security gateway.');
+  };
+
+  const navTo = (tab: 'workspace' | 'audit' | 'security' | 'offline' | 'integrations') => {
+    setActiveTab(tab);
+    setMobileNavOpen(false);
   };
 
   if (checkingAuth) {
@@ -316,7 +322,9 @@ export const App: React.FC = () => {
 
   return (
     <div className="app-shell">
-      <aside className="sidebar">
+      <div className={`sidebar-overlay ${mobileNavOpen ? 'open' : ''}`} onClick={() => setMobileNavOpen(false)} />
+      
+      <aside className={`sidebar ${mobileNavOpen ? 'open' : ''}`}>
         <div className="brand">
           <div className="brand-mark">C</div>
           <div>
@@ -325,19 +333,19 @@ export const App: React.FC = () => {
           </div>
         </div>
         <nav aria-label="Primary navigation">
-          <button className={`nav-item ${activeTab === 'workspace' ? 'active' : ''}`} onClick={() => setActiveTab('workspace')}>
+          <button className={`nav-item ${activeTab === 'workspace' ? 'active' : ''}`} onClick={() => navTo('workspace')}>
             <span>▣</span>Clinical workspace
           </button>
-          <button className={`nav-item ${activeTab === 'audit' ? 'active' : ''}`} onClick={() => setActiveTab('audit')}>
+          <button className={`nav-item ${activeTab === 'audit' ? 'active' : ''}`} onClick={() => navTo('audit')}>
             <span>◫</span>Audit vault
           </button>
-          <button className={`nav-item ${activeTab === 'security' ? 'active' : ''}`} onClick={() => setActiveTab('security')}>
-            <span>◈</span>Security center <b id="alertBadge">{alerts.filter(a => a.status !== 'RESOLVED').length}</b>
+          <button className={`nav-item ${activeTab === 'security' ? 'active' : ''}`} onClick={() => navTo('security')}>
+            <span>◈</span>Security center <b>{alerts.filter(a => a.status !== 'RESOLVED').length}</b>
           </button>
-          <button className={`nav-item ${activeTab === 'offline' ? 'active' : ''}`} onClick={() => setActiveTab('offline')}>
+          <button className={`nav-item ${activeTab === 'offline' ? 'active' : ''}`} onClick={() => navTo('offline')}>
             <span>◌</span>Downtime cache
           </button>
-          <button className={`nav-item ${activeTab === 'integrations' ? 'active' : ''}`} onClick={() => setActiveTab('integrations')}>
+          <button className={`nav-item ${activeTab === 'integrations' ? 'active' : ''}`} onClick={() => navTo('integrations')}>
             <span>⚡</span>EMR connectors
           </button>
         </nav>
@@ -355,9 +363,14 @@ export const App: React.FC = () => {
 
       <main>
         <header className="topbar">
-          <div id="crumb">
-            <span>{activeTab === 'workspace' ? 'Clinical workspace' : activeTab === 'audit' ? 'Audit vault' : activeTab === 'security' ? 'Security center' : activeTab === 'offline' ? 'Downtime cache' : 'EMR Connectors'}</span>
-            <small>Authenticated Staff: {currentUser.name} ({currentUser.role})</small>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <button className="mobile-nav-toggle" onClick={() => setMobileNavOpen(!mobileNavOpen)} aria-label="Toggle navigation menu">
+              ☰
+            </button>
+            <div id="crumb">
+              <span>{activeTab === 'workspace' ? 'Clinical workspace' : activeTab === 'audit' ? 'Audit vault' : activeTab === 'security' ? 'Security center' : activeTab === 'offline' ? 'Downtime cache' : 'EMR Connectors'}</span>
+              <small>Authenticated Staff: {currentUser.name} ({currentUser.role})</small>
+            </div>
           </div>
           <div className="top-controls">
             <label className="network">
@@ -414,7 +427,7 @@ export const App: React.FC = () => {
                       <option value="false">Off duty</option>
                     </select>
                   </label>
-                  <label style={{ gridColumn: 'span 2' }}>Request Purpose
+                  <label style={{ gridColumn: '1 / -1' }}>Request Purpose
                     <select value={purpose} onChange={e => setPurpose(e.target.value)}>
                       <option value="TREATMENT">Treatment</option>
                       <option value="ADMINISTRATION">Administration</option>
