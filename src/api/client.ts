@@ -3,9 +3,87 @@ import { User, Patient, PatientRecord, AuditEvent, SecurityAlert, PolicyResult, 
 const BASE_URL = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
 const API_BASE = `${BASE_URL}/api`;
 
+export function getStoredToken(): string | null {
+  return localStorage.getItem('cg_token');
+}
+
+export function setStoredToken(token: string) {
+  localStorage.setItem('cg_token', token);
+}
+
+export function clearStoredToken() {
+  localStorage.removeItem('cg_token');
+}
+
+// Centralized authenticated request helper (Part 6)
+async function apiFetch(path: string, options: RequestInit = {}): Promise<Response> {
+  const token = getStoredToken();
+  const headers = new Headers(options.headers || {});
+
+  if (!headers.has('Content-Type') && options.body) {
+    headers.set('Content-Type', 'application/json');
+  }
+
+  if (token && !headers.has('Authorization')) {
+    headers.set('Authorization', `Bearer ${token}`);
+  }
+
+  const url = path.startsWith('http') ? path : `${API_BASE}${path}`;
+
+  try {
+    const res = await fetch(url, { ...options, headers });
+    return res;
+  } catch (err) {
+    console.error('API Fetch Network Failure:', path, err);
+    throw new Error('NETWORK_UNAVAILABLE');
+  }
+}
+
+// --- AUTHENTICATION ---
+export async function login(userId: string, password: string): Promise<{ success: boolean; token?: string; user?: User; error?: string }> {
+  try {
+    const res = await apiFetch('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ userId, password })
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      return { success: false, error: err.message || 'Invalid Staff ID or password.' };
+    }
+
+    const data = await res.json();
+    setStoredToken(data.token);
+    return { success: true, token: data.token, user: data.user };
+  } catch (err) {
+    return { success: false, error: 'Security service unreachable.' };
+  }
+}
+
+export async function logout(): Promise<void> {
+  try {
+    await apiFetch('/auth/logout', { method: 'POST' });
+  } catch (e) {
+    // Ignore error on logout
+  }
+  clearStoredToken();
+}
+
+export async function fetchCurrentUser(): Promise<User | null> {
+  try {
+    const res = await apiFetch('/auth/me');
+    if (!res.ok) return null;
+    return await res.json();
+  } catch (err) {
+    return null;
+  }
+}
+
+// --- USERS & PATIENTS ---
 export async function fetchUsers(): Promise<User[]> {
   try {
-    const res = await fetch(`${API_BASE}/users`);
+    const res = await apiFetch('/users');
+    if (!res.ok) return [];
     return await res.json();
   } catch (err) {
     return [];
@@ -14,7 +92,8 @@ export async function fetchUsers(): Promise<User[]> {
 
 export async function fetchPatients(): Promise<Patient[]> {
   try {
-    const res = await fetch(`${API_BASE}/patients`);
+    const res = await apiFetch('/patients');
+    if (!res.ok) return [];
     const data = await res.json();
     return data.map((p: any) => ({
       id: p.id,
@@ -29,19 +108,17 @@ export async function fetchPatients(): Promise<Patient[]> {
   }
 }
 
+// --- ACCESS CONTROL & RECORDS ---
 export async function checkAccess(
   patientId: string,
-  userId: string,
   duty: boolean,
   deviceId: string,
   emergency = false
 ): Promise<PolicyResult> {
   try {
-    const res = await fetch(`${API_BASE}/access/check`, {
+    const res = await apiFetch('/access/check', {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
-        'x-user-id': userId,
         'x-duty-status': String(duty),
         'x-device-id': deviceId
       },
@@ -52,21 +129,19 @@ export async function checkAccess(
     return {
       decision: 'deny',
       reasonCode: 'POLICY_UNAVAILABLE',
-      detail: 'Fail-closed: Policy security service is unreachable.'
+      detail: 'Fail-closed: Security policy engine unreachable.'
     };
   }
 }
 
 export async function fetchPatientRecord(
   patientId: string,
-  userId: string,
   duty: boolean,
   deviceId: string
 ): Promise<{ success: boolean; record?: PatientRecord; error?: PolicyResult }> {
   try {
-    const res = await fetch(`${API_BASE}/patients/${patientId}/records`, {
+    const res = await apiFetch(`/patients/${patientId}/records`, {
       headers: {
-        'x-user-id': userId,
         'x-duty-status': String(duty),
         'x-device-id': deviceId
       }
@@ -77,6 +152,10 @@ export async function fetchPatientRecord(
       return { success: false, error: err };
     }
 
+    if (!res.ok) {
+      return { success: false, error: { decision: 'deny', reasonCode: 'NOT_FOUND', detail: 'Patient record not found.' } };
+    }
+
     const record = await res.json();
     return { success: true, record };
   } catch (err) {
@@ -85,33 +164,34 @@ export async function fetchPatientRecord(
       error: {
         decision: 'deny',
         reasonCode: 'NETWORK_ERROR',
-        detail: 'Network loss: Full patient record unavailable.'
+        detail: 'Network loss: Full patient record history is unavailable offline.'
       }
     };
   }
 }
 
-export async function invokeBreakGlass(patientId: string, reason: string, userId: string): Promise<any> {
-  const res = await fetch(`${API_BASE}/break-glass/start`, {
+// --- BREAK GLASS ---
+export async function invokeBreakGlass(patientId: string, reason: string): Promise<any> {
+  const res = await apiFetch('/break-glass/start', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-user-id': userId },
     body: JSON.stringify({ patientId, reason })
   });
   return await res.json();
 }
 
-export async function endBreakGlass(patientId: string, userId: string): Promise<any> {
-  const res = await fetch(`${API_BASE}/break-glass/end`, {
+export async function endBreakGlass(patientId: string): Promise<any> {
+  const res = await apiFetch('/break-glass/end', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-user-id': userId },
     body: JSON.stringify({ patientId })
   });
   return await res.json();
 }
 
+// --- AUDIT & SECURITY ALERTS ---
 export async function fetchAuditEvents(): Promise<{ events: AuditEvent[]; checkpoint: Checkpoint }> {
   try {
-    const res = await fetch(`${API_BASE}/audit/events`);
+    const res = await apiFetch('/audit/events');
+    if (!res.ok) return { events: [], checkpoint: { seqStart: 0, seqEnd: 0, rootHash: 'GENESIS', signature: 'UNSIGNED' } };
     return await res.json();
   } catch (err) {
     return { events: [], checkpoint: { seqStart: 0, seqEnd: 0, rootHash: 'GENESIS', signature: 'UNSIGNED' } };
@@ -119,45 +199,58 @@ export async function fetchAuditEvents(): Promise<{ events: AuditEvent[]; checkp
 }
 
 export async function verifyAuditVault(): Promise<{ valid: boolean; reason?: string; checkpoint?: Checkpoint; eventCount?: number }> {
-  const res = await fetch(`${API_BASE}/audit/verify`, { method: 'POST' });
+  const res = await apiFetch('/audit/verify', { method: 'POST' });
   return await res.json();
 }
 
 export async function stageAuditTampering(): Promise<any> {
-  const res = await fetch(`${API_BASE}/audit/tamper`, { method: 'POST' });
+  const res = await apiFetch('/audit/tamper', { method: 'POST' });
   return await res.json();
 }
 
 export async function fetchSecurityAlerts(): Promise<SecurityAlert[]> {
   try {
-    const res = await fetch(`${API_BASE}/security/alerts`);
+    const res = await apiFetch('/security/alerts');
+    if (!res.ok) return [];
     return await res.json();
   } catch (err) {
     return [];
   }
 }
 
-export async function updateAlertStatus(alertId: string, status: string, userId: string): Promise<SecurityAlert> {
-  const res = await fetch(`${API_BASE}/security/alerts/${alertId}`, {
+export async function updateAlertStatus(alertId: string, status: string): Promise<SecurityAlert> {
+  const res = await apiFetch(`/security/alerts/${alertId}`, {
     method: 'PATCH',
-    headers: { 'Content-Type': 'application/json', 'x-user-id': userId },
     body: JSON.stringify({ status })
   });
   return await res.json();
 }
 
-export async function fetchDowntimeSummary(patientId: string): Promise<any> {
-  const res = await fetch(`${API_BASE}/downtime/patients/${patientId}`);
-  if (!res.ok) {
-    throw new Error('Downtime summary restricted');
+// --- EMR CONNECTOR ---
+export async function fetchEMRIntegrations(): Promise<any[]> {
+  try {
+    const res = await apiFetch('/emr/integrations');
+    if (!res.ok) return [];
+    return await res.json();
+  } catch (e) {
+    return [];
   }
+}
+
+export async function testEMRConnection(): Promise<any> {
+  const res = await apiFetch('/emr/test-connection', { method: 'POST' });
   return await res.json();
 }
 
-export async function syncOfflineQueue(queue: any[], userId: string): Promise<any> {
-  const res = await fetch(`${API_BASE}/downtime/sync`, {
+export async function fetchEMRRecord(patientId: string): Promise<any> {
+  const res = await apiFetch(`/emr/patients/${patientId}/records`);
+  return await res.json();
+}
+
+// --- DOWNTIME SYNC ---
+export async function syncOfflineQueue(queue: any[]): Promise<any> {
+  const res = await apiFetch('/downtime/sync', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-user-id': userId },
     body: JSON.stringify({ queue })
   });
   return await res.json();

@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS users (
   department TEXT NOT NULL,
   ward_id TEXT,
   duty INTEGER NOT NULL DEFAULT 1,
+  password_hash TEXT NOT NULL,
   status TEXT NOT NULL DEFAULT 'active'
 );
 
@@ -131,6 +132,25 @@ CREATE TABLE IF NOT EXISTS offline_events (
   created_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS emr_integrations (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  type TEXT NOT NULL,
+  base_url TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'CONNECTED',
+  capabilities_json TEXT NOT NULL,
+  last_tested_at TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS emr_mappings (
+  id TEXT PRIMARY KEY,
+  integration_id TEXT NOT NULL REFERENCES emr_integrations(id),
+  external_patient_id TEXT NOT NULL,
+  contextguard_patient_id TEXT NOT NULL REFERENCES patients(id),
+  created_at TEXT NOT NULL
+);
+
 -- Index Definitions
 CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
 CREATE INDEX IF NOT EXISTS idx_users_department ON users(department);
@@ -143,3 +163,4 @@ CREATE INDEX IF NOT EXISTS idx_audit_actor ON audit_events(actor_id);
 CREATE INDEX IF NOT EXISTS idx_audit_patient ON audit_events(patient_id);
 CREATE INDEX IF NOT EXISTS idx_audit_timestamp ON audit_events(timestamp);
 CREATE INDEX IF NOT EXISTS idx_security_alerts_status ON security_alerts(status);
+CREATE INDEX IF NOT EXISTS idx_emr_mappings_external ON emr_mappings(external_patient_id);

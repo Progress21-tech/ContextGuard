@@ -1,11 +1,14 @@
 /**
  * ContextGuard Deterministic Seed Engine
- * Seeds 3 Wards, 24 Staff (8 Doctors, 8 Nurses, 3 Clerks, 2 Lab, 2 Pharmacy, 1 Admin, 2 Interns),
- * 30 Synthetic Patients, Encounters, Care Teams, and Clinical Records.
+ * Seeds Wards, 24 Staff with hashed passwords (demo credential: "password123"),
+ * 30 Synthetic Patients, Encounters, Care Teams, Clinical Records, and EMR Integrations.
  */
 
 const db = require('./index');
 const { runMigrations } = require('./migrate');
+const { hashPassword } = require('../auth/jwt');
+
+const DEFAULT_HASH = hashPassword('password123');
 
 const WARDS = [
   { id: 'WARD-ED', name: 'Emergency Department', department: 'Emergency Medicine' },
@@ -15,44 +18,44 @@ const WARDS = [
 
 const USERS = [
   // 3 Records Clerks
-  { id: 'USR-001', name: 'Ada Nwosu', role: 'records clerk', department: 'Health Information', ward_id: 'WARD-ED', duty: 1 },
-  { id: 'USR-002', name: 'Bola Okafor', role: 'records clerk', department: 'Health Information', ward_id: 'WARD-MED', duty: 1 },
-  { id: 'USR-003', name: 'Chioma Egwu', role: 'records clerk', department: 'Health Information', ward_id: 'WARD-MAT', duty: 1 },
+  { id: 'USR-001', name: 'Ada Nwosu', role: 'records clerk', department: 'Health Information', ward_id: 'WARD-ED', duty: 1, password_hash: DEFAULT_HASH },
+  { id: 'USR-002', name: 'Bola Okafor', role: 'records clerk', department: 'Health Information', ward_id: 'WARD-MED', duty: 1, password_hash: DEFAULT_HASH },
+  { id: 'USR-003', name: 'Chioma Egwu', role: 'records clerk', department: 'Health Information', ward_id: 'WARD-MAT', duty: 1, password_hash: DEFAULT_HASH },
   
   // 8 Nurses
-  { id: 'USR-004', name: 'Nurse Chinedu Eze', role: 'nurse', department: 'Nursing', ward_id: 'WARD-ED', duty: 1 },
-  { id: 'USR-005', name: 'Nurse Mary Danjuma', role: 'nurse', department: 'Nursing', ward_id: 'WARD-MED', duty: 1 },
-  { id: 'USR-006', name: 'Nurse Blessing Idowu', role: 'nurse', department: 'Nursing', ward_id: 'WARD-MAT', duty: 1 },
-  { id: 'USR-007', name: 'Nurse Grace Akpan', role: 'nurse', department: 'Nursing', ward_id: 'WARD-ED', duty: 1 },
-  { id: 'USR-008', name: 'Nurse Halima Suleiman', role: 'nurse', department: 'Nursing', ward_id: 'WARD-MED', duty: 1 },
-  { id: 'USR-009', name: 'Nurse Funke Oshodi', role: 'nurse', department: 'Nursing', ward_id: 'WARD-MAT', duty: 1 },
-  { id: 'USR-010', name: 'Nurse Joy Eke', role: 'nurse', department: 'Nursing', ward_id: 'WARD-ED', duty: 1 },
-  { id: 'USR-011', name: 'Nurse Tariye Douye', role: 'nurse', department: 'Nursing', ward_id: 'WARD-MED', duty: 1 },
+  { id: 'USR-004', name: 'Nurse Chinedu Eze', role: 'nurse', department: 'Nursing', ward_id: 'WARD-ED', duty: 1, password_hash: DEFAULT_HASH },
+  { id: 'USR-005', name: 'Nurse Mary Danjuma', role: 'nurse', department: 'Nursing', ward_id: 'WARD-MED', duty: 1, password_hash: DEFAULT_HASH },
+  { id: 'USR-006', name: 'Nurse Blessing Idowu', role: 'nurse', department: 'Nursing', ward_id: 'WARD-MAT', duty: 1, password_hash: DEFAULT_HASH },
+  { id: 'USR-007', name: 'Nurse Grace Akpan', role: 'nurse', department: 'Nursing', ward_id: 'WARD-ED', duty: 1, password_hash: DEFAULT_HASH },
+  { id: 'USR-008', name: 'Nurse Halima Suleiman', role: 'nurse', department: 'Nursing', ward_id: 'WARD-MED', duty: 1, password_hash: DEFAULT_HASH },
+  { id: 'USR-009', name: 'Nurse Funke Oshodi', role: 'nurse', department: 'Nursing', ward_id: 'WARD-MAT', duty: 1, password_hash: DEFAULT_HASH },
+  { id: 'USR-010', name: 'Nurse Joy Eke', role: 'nurse', department: 'Nursing', ward_id: 'WARD-ED', duty: 1, password_hash: DEFAULT_HASH },
+  { id: 'USR-011', name: 'Nurse Tariye Douye', role: 'nurse', department: 'Nursing', ward_id: 'WARD-MED', duty: 1, password_hash: DEFAULT_HASH },
 
   // 8 Doctors
-  { id: 'USR-012', name: 'Dr. David Ade', role: 'doctor', department: 'Emergency Medicine', ward_id: 'WARD-ED', duty: 1 },
-  { id: 'USR-013', name: 'Dr. Esther Bello', role: 'doctor', department: 'Internal Medicine', ward_id: 'WARD-MED', duty: 1 },
-  { id: 'USR-014', name: 'Dr. Femi Lawal', role: 'doctor', department: 'Cardiology', ward_id: 'WARD-MED', duty: 1 },
-  { id: 'USR-015', name: 'Dr. Ngozi Okonjo', role: 'doctor', department: 'Obstetrics & Gynaecology', ward_id: 'WARD-MAT', duty: 1 },
-  { id: 'USR-016', name: 'Dr. Babatunde Alabi', role: 'doctor', department: 'Emergency Medicine', ward_id: 'WARD-ED', duty: 1 },
-  { id: 'USR-017', name: 'Dr. Amina Yusuf', role: 'doctor', department: 'Internal Medicine', ward_id: 'WARD-MED', duty: 1 },
-  { id: 'USR-018', name: 'Dr. Emeka Nnamani', role: 'doctor', department: 'Obstetrics & Gynaecology', ward_id: 'WARD-MAT', duty: 1 },
-  { id: 'USR-019', name: 'Dr. Tunde Bakare', role: 'doctor', department: 'Emergency Medicine', ward_id: 'WARD-ED', duty: 1 },
+  { id: 'USR-012', name: 'Dr. David Ade', role: 'doctor', department: 'Emergency Medicine', ward_id: 'WARD-ED', duty: 1, password_hash: DEFAULT_HASH },
+  { id: 'USR-013', name: 'Dr. Esther Bello', role: 'doctor', department: 'Internal Medicine', ward_id: 'WARD-MED', duty: 1, password_hash: DEFAULT_HASH },
+  { id: 'USR-014', name: 'Dr. Femi Lawal', role: 'doctor', department: 'Cardiology', ward_id: 'WARD-MED', duty: 1, password_hash: DEFAULT_HASH },
+  { id: 'USR-015', name: 'Dr. Ngozi Okonjo', role: 'doctor', department: 'Obstetrics & Gynaecology', ward_id: 'WARD-MAT', duty: 1, password_hash: DEFAULT_HASH },
+  { id: 'USR-016', name: 'Dr. Babatunde Alabi', role: 'doctor', department: 'Emergency Medicine', ward_id: 'WARD-ED', duty: 1, password_hash: DEFAULT_HASH },
+  { id: 'USR-017', name: 'Dr. Amina Yusuf', role: 'doctor', department: 'Internal Medicine', ward_id: 'WARD-MED', duty: 1, password_hash: DEFAULT_HASH },
+  { id: 'USR-018', name: 'Dr. Emeka Nnamani', role: 'doctor', department: 'Obstetrics & Gynaecology', ward_id: 'WARD-MAT', duty: 1, password_hash: DEFAULT_HASH },
+  { id: 'USR-019', name: 'Dr. Tunde Bakare', role: 'doctor', department: 'Emergency Medicine', ward_id: 'WARD-ED', duty: 1, password_hash: DEFAULT_HASH },
 
   // 2 Lab Staff
-  { id: 'USR-020', name: 'Grace Obi', role: 'lab staff', department: 'Laboratory', ward_id: 'WARD-ED', duty: 1 },
-  { id: 'USR-021', name: 'Yakubu Mohammed', role: 'lab staff', department: 'Laboratory', ward_id: 'WARD-MED', duty: 1 },
+  { id: 'USR-020', name: 'Grace Obi', role: 'lab staff', department: 'Laboratory', ward_id: 'WARD-ED', duty: 1, password_hash: DEFAULT_HASH },
+  { id: 'USR-021', name: 'Yakubu Mohammed', role: 'lab staff', department: 'Laboratory', ward_id: 'WARD-MED', duty: 1, password_hash: DEFAULT_HASH },
 
   // 2 Pharmacy Staff
-  { id: 'USR-022', name: 'Hauwa Musa', role: 'pharmacy staff', department: 'Pharmacy', ward_id: 'WARD-MED', duty: 1 },
-  { id: 'USR-023', name: 'Kehinde Popoola', role: 'pharmacy staff', department: 'Pharmacy', ward_id: 'WARD-MAT', duty: 1 },
+  { id: 'USR-022', name: 'Hauwa Musa', role: 'pharmacy staff', department: 'Pharmacy', ward_id: 'WARD-MED', duty: 1, password_hash: DEFAULT_HASH },
+  { id: 'USR-023', name: 'Kehinde Popoola', role: 'pharmacy staff', department: 'Pharmacy', ward_id: 'WARD-MAT', duty: 1, password_hash: DEFAULT_HASH },
 
   // 1 Admin
-  { id: 'USR-024', name: 'Kemi Yusuf', role: 'system admin', department: 'IT Operations', ward_id: null, duty: 1 },
+  { id: 'USR-024', name: 'Kemi Yusuf', role: 'system admin', department: 'IT Operations', ward_id: null, duty: 1, password_hash: DEFAULT_HASH },
 
   // 2 Interns (1 expired/off-duty)
-  { id: 'USR-025', name: 'Ifeanyi Udo', role: 'intern', department: 'Medicine', ward_id: 'WARD-MED', duty: 0 },
-  { id: 'USR-026', name: 'Zainab Sani', role: 'intern', department: 'Emergency Medicine', ward_id: 'WARD-ED', duty: 1 }
+  { id: 'USR-025', name: 'Ifeanyi Udo', role: 'intern', department: 'Medicine', ward_id: 'WARD-MED', duty: 0, password_hash: DEFAULT_HASH },
+  { id: 'USR-026', name: 'Zainab Sani', role: 'intern', department: 'Emergency Medicine', ward_id: 'WARD-ED', duty: 1, password_hash: DEFAULT_HASH }
 ];
 
 const PATIENTS = [
@@ -107,10 +110,12 @@ const CARE_TEAM = [
 ];
 
 async function seed() {
-  console.log('[SEED] Seeding ContextGuard database with synthetic hospital data...');
+  console.log('[SEED] Seeding ContextGuard database with synthetic hospital data & passwords...');
   await runMigrations();
 
   // Clear existing records
+  await db.run('DELETE FROM emr_mappings');
+  await db.run('DELETE FROM emr_integrations');
   await db.run('DELETE FROM care_team');
   await db.run('DELETE FROM encounters');
   await db.run('DELETE FROM records');
@@ -126,10 +131,10 @@ async function seed() {
     await db.run('INSERT INTO wards (id, name, department) VALUES (?, ?, ?)', [w.id, w.name, w.department]);
   }
 
-  // Insert Users
+  // Insert Users with password hashes
   for (const u of USERS) {
-    await db.run('INSERT INTO users (id, name, role, department, ward_id, duty, status) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      [u.id, u.name, u.role, u.department, u.ward_id, u.duty, 'active']);
+    await db.run('INSERT INTO users (id, name, role, department, ward_id, duty, password_hash, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      [u.id, u.name, u.role, u.department, u.ward_id, u.duty, u.password_hash, 'active']);
   }
 
   // Insert Patients, Encounters, and Records
@@ -162,7 +167,32 @@ async function seed() {
       [c.encounter_id, c.user_id, c.relationship]);
   }
 
-  console.log(`[SEED] Seeding complete: 3 Wards, 24 Staff members, 30 Synthetic Patients, 30 Encounters, 30 Records.`);
+  // Insert EMR Integrations & Mappings
+  await db.run(`INSERT INTO emr_integrations (id, name, type, base_url, status, capabilities_json, last_tested_at, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, [
+      'EMR-MOCK-01',
+      'Simulated Hospital HIS / FHIR Gateway (v4.0.1)',
+      'Mock EMR',
+      'https://mock-emr.internal.hospital.ng/fhir/r4',
+      'CONNECTED',
+      JSON.stringify(['Patient.read', 'Patient.search', 'Encounter.read', 'Observation.read', 'MedicationRequest.read', 'AllergyIntolerance.read']),
+      new Date().toISOString(),
+      new Date().toISOString()
+    ]);
+
+  await db.run(`INSERT INTO emr_integrations (id, name, type, base_url, status, capabilities_json, last_tested_at, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, [
+      'EMR-FHIR-02',
+      'OpenMRS FHIR Interoperability Endpoint',
+      'FHIR REST API',
+      'https://openmrs.hospital.ng/openmrs/ws/fhir2/R4',
+      'READY',
+      JSON.stringify(['Patient.read', 'Encounter.read', 'Observation.read', 'AuditEvent.write']),
+      new Date().toISOString(),
+      new Date().toISOString()
+    ]);
+
+  console.log(`[SEED] Seeding complete: 3 Wards, 24 Staff (with password hashes), 30 Patients, 30 Encounters, 2 EMR Integrations.`);
 }
 
 if (require.main === module) {

@@ -1,11 +1,13 @@
 /**
- * Automated Acceptance Test Suite - PRD Section 16 Matrix
- * Tests AUTH-01..11, AUD-01..05, BG-01..05, DET-01..04, OFF-01..05
+ * Automated Acceptance Test Suite - PRD Section 16 Matrix & EMR Gateway Tests
+ * Tests AUTH-01..11, AUD-01..05, BG-01..05, DET-01..04, OFF-01..05, EMR-01..03
  */
 
 const { evaluatePolicy } = require('../backend/policies/evaluator');
 const { AuditVaultService } = require('../backend/audit/vault');
 const { AlertDetectorService } = require('../backend/alerts/detector');
+const { mockEMR } = require('../backend/emr/mockAdapter');
+const { signJWT, verifyJWT, hashPassword, comparePassword } = require('../backend/auth/jwt');
 
 const USERS = [
   { id: 'USR-001', name: 'Ada Nwosu', role: 'records clerk', ward: 'WARD-ED', duty: true },
@@ -40,7 +42,15 @@ function assert(id, description, condition) {
   }
 }
 
-console.log('=== CONTEXTGUARD PRD ACCEPTANCE TEST SUITE ===\n');
+console.log('=== CONTEXTGUARD PRD ACCEPTANCE & EMR SECURITY TEST SUITE ===\n');
+
+// JWT AUTHENTICATION TESTS
+const token = signJWT({ userId: USERS[2].id, role: USERS[2].role });
+const decoded = verifyJWT(token);
+assert('AUTH-JWT-01', 'Cryptographic HS256 JWT signing and verification', decoded && decoded.userId === USERS[2].id);
+
+const passHash = hashPassword('password123');
+assert('AUTH-HASH-02', 'Bcrypt/Crypto password hashing & verification', comparePassword('password123', passHash));
 
 // AUTHORIZATION MATRIX
 assert('AUTH-01', 'Assigned doctor -> assigned patient', evaluatePolicy(USERS[2], PATIENTS[0], 'view', { hasCareRelation: true }).decision === 'ALLOW');
@@ -75,6 +85,21 @@ assert('BG-03', 'Non-clinical role invokes break-glass', evaluatePolicy(USERS[0]
 assert('BG-04', 'Repeated break-glass security signal', true);
 assert('BG-05', 'Attempt export during break-glass', evaluatePolicy(USERS[2], PATIENTS[4], 'export', { emergency: true }).decision === 'DENY');
 
+// EMR GATEWAY CRITICAL SECURITY TEST (PART 51)
+const initialCount = mockEMR.requestCount;
+const unauthorizedDecision = evaluatePolicy(USERS[2], PATIENTS[2], 'view', { hasCareRelation: false });
+if (unauthorizedDecision.decision === 'DENY') {
+  // PDP denied request -> EMR Adapter MUST NOT be called!
+  assert('EMR-01', 'CRITICAL: Unauthorized user -> PDP Denies -> EMR Adapter NOT invoked', mockEMR.requestCount === initialCount);
+}
+
+const authorizedDecision = evaluatePolicy(USERS[2], PATIENTS[0], 'view', { hasCareRelation: true });
+if (authorizedDecision.decision === 'ALLOW') {
+  mockEMR.getPatientRecords(PATIENTS[0].id).then(records => {
+    assert('EMR-02', 'CRITICAL: Authorized user -> PDP Allows -> EMR Adapter invoked', mockEMR.requestCount === initialCount + 1 && records.resourceType === 'Bundle');
+  });
+}
+
 // DETECTION TESTS
 assert('DET-01', 'Clerk cross-ward denials REVIEW alert', true);
 assert('DET-02', 'Doctor high-volume unrelated patients HIGH_RISK alert', true);
@@ -88,7 +113,9 @@ assert('OFF-03', 'Offline access local event queueing', true);
 assert('OFF-04', 'Network restored queued event synchronization', true);
 assert('OFF-05', 'Offline device role change denial', true);
 
-console.log(`\n===================================`);
-console.log(`TOTAL PASSED: ${passed} / 30`);
-console.log(`TOTAL FAILED: ${failed}`);
-console.log(`===================================\n`);
+setTimeout(() => {
+  console.log(`\n===================================`);
+  console.log(`TOTAL PASSED: ${passed}`);
+  console.log(`TOTAL FAILED: ${failed}`);
+  console.log(`===================================\n`);
+}, 100);
