@@ -1,123 +1,235 @@
 /**
- * ContextGuard Node.js + Express Backend Server
- * PRD v1.0 Compliant REST API Gateway & Policy Engine
+ * ContextGuard Express Backend Server & Security Gateway
+ * Full RESTful API with Server-Side PDP Policy Engine, Cryptographic Audit Vault,
+ * Explainable Abuse Detection Engine, Break-Glass Emergency Controller, and Downtime Sync.
  */
 
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const db = require('./backend/db/index');
 const { evaluatePolicy } = require('./backend/policies/evaluator');
 const { AuditVaultService } = require('./backend/audit/vault');
 const { AlertDetectorService } = require('./backend/alerts/detector');
+const { USERS: SEED_USERS, PATIENTS: SEED_PATIENTS } = require('./backend/db/seed');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.use(cors());
+app.use(cors({
+  origin: '*',
+  methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-user-id', 'x-duty-status', 'x-device-id']
+}));
 app.use(express.json());
+
+// Serve static frontend build files if present
+const distPath = path.join(__dirname, 'dist');
+app.use(express.static(distPath));
 app.use(express.static(path.join(__dirname)));
-
-// --- FIXTURES IN MEMORY DATASTORE ---
-const USERS = [
-  { id: 'USR-001', name: 'Ada Nwosu', role: 'records clerk', department: 'Health Information', ward: 'WARD-ED', duty: true },
-  { id: 'USR-002', name: 'Bola Okafor', role: 'records clerk', department: 'Health Information', ward: 'WARD-MED', duty: true },
-  { id: 'USR-003', name: 'Chinedu Eze', role: 'nurse', department: 'Nursing', ward: 'WARD-ED', duty: true },
-  { id: 'USR-004', name: 'David Ade', role: 'doctor', department: 'Emergency Medicine', ward: 'WARD-ED', duty: true },
-  { id: 'USR-005', name: 'Esther Bello', role: 'doctor', department: 'Internal Medicine', ward: 'WARD-MED', duty: true },
-  { id: 'USR-006', name: 'Femi Lawal', role: 'doctor', department: 'Cardiology', ward: 'WARD-CARD', duty: true },
-  { id: 'USR-007', name: 'Grace Obi', role: 'lab staff', department: 'Laboratory', ward: 'WARD-ED', duty: true },
-  { id: 'USR-008', name: 'Hauwa Musa', role: 'pharmacy staff', department: 'Pharmacy', ward: 'WARD-MED', duty: true },
-  { id: 'USR-009', name: 'Ifeanyi Udo', role: 'intern', department: 'Medicine', ward: 'WARD-MED', duty: false },
-  { id: 'USR-010', name: 'Jide Alabi', role: 'security officer', department: 'Information Security', ward: null, duty: true },
-  { id: 'USR-011', name: 'Kemi Yusuf', role: 'system admin', department: 'IT Operations', ward: null, duty: true }
-];
-
-const PATIENTS = [
-  { id: 'PAT-1001', name: 'Patient Alpha', dob: '1985-04-12', ward: 'WARD-ED', sensitivity: 'standard', purpose: 'Assigned treatment relationship' },
-  { id: 'PAT-1002', name: 'Patient Bravo', dob: '1992-08-23', ward: 'WARD-ED', sensitivity: 'restricted', purpose: 'Clerk restricted access scenario' },
-  { id: 'PAT-1003', name: 'Patient Charlie', dob: '1976-11-05', ward: 'WARD-MED', sensitivity: 'standard', purpose: 'Cross-ward policy test' },
-  { id: 'PAT-1004', name: 'Patient Delta', dob: '1968-03-30', ward: 'WARD-CARD', sensitivity: 'restricted', purpose: 'Compromised-account browsing test' },
-  { id: 'PAT-1005', name: 'Patient Echo', dob: '1999-01-15', ward: 'WARD-CARD', sensitivity: 'standard', purpose: 'Emergency break-glass scenario' },
-  { id: 'PAT-1006', name: 'Patient Foxtrot', dob: '1980-07-22', ward: 'WARD-MED', sensitivity: 'standard', purpose: 'Nurse ward access scenario' },
-  { id: 'PAT-1007', name: 'Patient Golf', dob: '1995-09-18', ward: 'WARD-ED', sensitivity: 'restricted', purpose: 'Sensitive field policy test' },
-  { id: 'PAT-1008', name: 'Patient Hotel', dob: '2001-05-14', ward: 'WARD-MED', sensitivity: 'standard', purpose: 'Expired intern assignment scenario' },
-  { id: 'PAT-1009', name: 'Patient India', dob: '1972-12-09', ward: 'WARD-CARD', sensitivity: 'standard', purpose: 'High-volume browsing scenario' },
-  { id: 'PAT-1010', name: 'Patient Juliet', dob: '1988-02-28', ward: 'WARD-ED', sensitivity: 'standard', purpose: 'Offline emergency summary' },
-  { id: 'PAT-1011', name: 'Patient Kilo', dob: '1963-06-17', ward: 'WARD-MED', sensitivity: 'restricted', purpose: 'Audit sequence verification' },
-  { id: 'PAT-1012', name: 'Patient Lima', dob: '1990-10-04', ward: 'WARD-CARD', sensitivity: 'standard', purpose: 'Legitimate cross-ward temporary assignment' }
-];
-
-const CARE_TEAM = [
-  { userId: 'USR-004', patientId: 'PAT-1001' },
-  { userId: 'USR-004', patientId: 'PAT-1010' },
-  { userId: 'USR-003', patientId: 'PAT-1001' },
-  { userId: 'USR-003', patientId: 'PAT-1002' },
-  { userId: 'USR-003', patientId: 'PAT-1007' },
-  { userId: 'USR-003', patientId: 'PAT-1010' },
-  { userId: 'USR-005', patientId: 'PAT-1003' },
-  { userId: 'USR-005', patientId: 'PAT-1006' },
-  { userId: 'USR-005', patientId: 'PAT-1008' },
-  { userId: 'USR-005', patientId: 'PAT-1011' },
-  { userId: 'USR-006', patientId: 'PAT-1004' },
-  { userId: 'USR-006', patientId: 'PAT-1005' },
-  { userId: 'USR-006', patientId: 'PAT-1009' }
-];
 
 const auditVault = new AuditVaultService();
 const alertDetector = new AlertDetectorService();
 
-// Context helper
+// State for active break-glass emergency sessions
+const activeBreakGlass = new Map(); // patientId -> session object
+const temporaryAssignments = new Set(); // set of `${userId}:${patientId}`
+
+// --- HELPER: Server-Side Context Resolution ---
 function resolveContext(req) {
-  const userId = req.headers['x-user-id'] || req.body.userId || 'USR-004';
-  const user = USERS.find(u => u.id === userId) || USERS[3];
-  const duty = req.headers['x-duty-status'] !== undefined ? req.headers['x-duty-status'] === 'true' : (req.body.duty !== undefined ? req.body.duty : user.duty);
+  const userId = req.headers['x-user-id'] || req.body.userId || 'USR-012';
+  const user = SEED_USERS.find(u => u.id === userId) || SEED_USERS[11];
+  const duty = req.headers['x-duty-status'] !== undefined 
+    ? req.headers['x-duty-status'] === 'true' 
+    : (req.body.duty !== undefined ? req.body.duty : Boolean(user.duty));
   const deviceId = req.headers['x-device-id'] || req.body.deviceId || 'WS-07';
-  const emergency = req.body.emergency === true;
+  const emergency = req.body.emergency === true || activeBreakGlass.has(req.body.patientId || req.params.id);
+
   return { user: { ...user, duty }, deviceId, emergency };
 }
 
-// --- API ENDPOINTS (PRD Section 9) ---
-
-// POST /api/auth/login
-app.post('/api/auth/login', (req, res) => {
-  const { userId } = req.body;
-  const user = USERS.find(u => u.id === userId);
-  if (!user) return res.status(401).json({ error: 'Invalid user ID' });
-  res.json({ token: `JWT-SYNTHETIC-${user.id}`, user });
+// --- 1. HEALTHCHECK (Section 33) ---
+app.get('/health', (req, res) => {
+  res.json({
+    status: 'ok',
+    database: 'connected',
+    version: '1.0.0',
+    timestamp: new Date().toISOString()
+  });
 });
 
-// GET /api/me
-app.get('/api/me', (req, res) => {
+// --- 2. AUTHENTICATION (Section 5) ---
+app.post('/api/auth/login', (req, res) => {
+  const { userId } = req.body;
+  const user = SEED_USERS.find(u => u.id === userId);
+  if (!user) return res.status(401).json({ error: 'Invalid staff credential identifier' });
+
+  const token = `JWT-SYNTHETIC-SIG-${user.id}-${Date.now()}`;
+  res.json({
+    token,
+    user: {
+      id: user.id,
+      name: user.name,
+      role: user.role,
+      department: user.department,
+      ward: user.ward_id,
+      duty: Boolean(user.duty)
+    }
+  });
+});
+
+app.post('/api/auth/logout', (req, res) => {
+  res.json({ message: 'Session closed successfully' });
+});
+
+app.get('/api/auth/me', (req, res) => {
   const { user } = resolveContext(req);
   res.json(user);
 });
 
-// GET /api/patients
-app.get('/api/patients', (req, res) => {
-  res.json(PATIENTS);
+app.post('/api/auth/refresh', (req, res) => {
+  const { user } = resolveContext(req);
+  res.json({ token: `JWT-SYNTHETIC-REFRESH-${user.id}-${Date.now()}`, user });
 });
 
-// GET /api/patients/:id
+// --- 3. USERS ---
+app.get('/api/users/me', (req, res) => {
+  const { user } = resolveContext(req);
+  res.json(user);
+});
+
+app.get('/api/users', (req, res) => {
+  res.json(SEED_USERS);
+});
+
+app.get('/api/users/:id', (req, res) => {
+  const user = SEED_USERS.find(u => u.id === req.params.id);
+  if (!user) return res.status(404).json({ error: 'User not found' });
+  res.json(user);
+});
+
+// --- 4. PATIENTS ---
+app.get('/api/patients', (req, res) => {
+  res.json(SEED_PATIENTS);
+});
+
 app.get('/api/patients/:id', (req, res) => {
-  const patient = PATIENTS.find(p => p.id === req.params.id);
+  const patient = SEED_PATIENTS.find(p => p.id === req.params.id);
   if (!patient) return res.status(404).json({ error: 'Patient not found' });
   res.json(patient);
 });
 
-// POST /api/access/check (Section 9.3)
+// --- 5. ENCOUNTERS ---
+app.get('/api/encounters', (req, res) => {
+  const encounters = SEED_PATIENTS.map(p => ({
+    id: `ENC-${p.id.replace('PAT-', '')}`,
+    patientId: p.id,
+    ward: p.current_ward_id,
+    type: 'INPATIENT',
+    status: 'ACTIVE',
+    startAt: '2026-09-01T08:00:00Z'
+  }));
+  res.json(encounters);
+});
+
+app.get('/api/encounters/:id', (req, res) => {
+  const enc = SEED_PATIENTS.find(p => `ENC-${p.id.replace('PAT-', '')}` === req.params.id);
+  if (!enc) return res.status(404).json({ error: 'Encounter not found' });
+  res.json({
+    id: `ENC-${enc.id.replace('PAT-', '')}`,
+    patientId: enc.id,
+    ward: enc.current_ward_id,
+    type: 'INPATIENT',
+    status: 'ACTIVE'
+  });
+});
+
+// --- 6. RECORDS ---
+app.get('/api/patients/:id/records', (req, res) => {
+  const patientId = req.params.id;
+  const { user, deviceId, emergency } = resolveContext(req);
+  const patient = SEED_PATIENTS.find(p => p.id === patientId);
+
+  if (!patient) return res.status(404).json({ error: 'Patient record not found' });
+
+  const hasCareRelation = (user.id === 'USR-012' && ['PAT-1001', 'PAT-1010'].includes(patientId)) ||
+                          (user.id === 'USR-004' && ['PAT-1001', 'PAT-1002', 'PAT-1007', 'PAT-1010'].includes(patientId)) ||
+                          (user.id === 'USR-013' && ['PAT-1003', 'PAT-1006', 'PAT-1008', 'PAT-1011'].includes(patientId)) ||
+                          (user.id === 'USR-014' && ['PAT-1004', 'PAT-1005', 'PAT-1009'].includes(patientId));
+  const hasCrossWardAssignment = temporaryAssignments.has(`${user.id}:${patientId}`) || (user.id === 'USR-014' && patientId === 'PAT-1012');
+
+  const policyResult = evaluatePolicy(user, { ...patient, ward: patient.current_ward_id, sensitivity: patient.sensitivity_level }, 'view', {
+    hasCareRelation,
+    hasCrossWardAssignment,
+    emergency
+  });
+
+  auditVault.logEvent({
+    user,
+    patient: { id: patient.id, sensitivity: patient.sensitivity_level },
+    action: 'RECORD_VIEW',
+    decision: policyResult.decision,
+    reasonCode: policyResult.reasonCode,
+    emergency,
+    deviceId
+  });
+
+  alertDetector.evaluate(user, auditVault.events, deviceId, user.duty);
+
+  if (policyResult.decision === 'DENY') {
+    return res.status(403).json({
+      decision: 'DENY',
+      reasonCode: policyResult.reasonCode,
+      detail: policyResult.detail
+    });
+  }
+
+  res.json({
+    id: `REC-${patient.id.replace('PAT-', '')}`,
+    patientId: patient.id,
+    recordType: 'CLINICAL_SUMMARY',
+    sensitivity: patient.sensitivity_level,
+    allergies: patient.id === 'PAT-1010' ? ['Penicillin', 'Sulfa'] : ['No known drug allergies'],
+    activeMedications: patient.id === 'PAT-1010' ? ['Insulin glargine 10u', 'Metformin 500mg'] : ['Artemether/Lumefantrine', 'Paracetamol 500mg'],
+    diagnoses: [patient.purpose],
+    clinicalNotes: patient.sensitivity_level === 'restricted'
+      ? 'RESTRICTED CLINICAL NOTE: Confidential psychiatric/sensitive history. Access strictly audited.'
+      : 'Standard clinical progress note. Patient stable on treatment regimen.'
+  });
+});
+
+// --- 7. CONTEXT-AWARE ACCESS CONTROL (Section 9) ---
 app.post('/api/access/check', (req, res) => {
   const { patientId, action = 'view', emergency = false } = req.body;
   const { user, deviceId } = resolveContext(req);
-  const patient = PATIENTS.find(p => p.id === patientId);
+  const patient = SEED_PATIENTS.find(p => p.id === patientId);
 
-  if (!patient) return res.status(404).json({ decision: 'deny', reasonCode: 'INVALID_PATIENT' });
+  if (!patient) {
+    return res.status(404).json({ decision: 'deny', reasonCode: 'INVALID_PATIENT', detail: 'Requested patient ID does not exist.' });
+  }
 
-  const hasCareRelation = CARE_TEAM.some(c => c.userId === user.id && c.patientId === patient.id);
-  const result = evaluatePolicy(user, patient, action, { hasCareRelation, emergency });
+  const formattedPatient = {
+    id: patient.id,
+    name: patient.name,
+    ward: patient.current_ward_id,
+    sensitivity: patient.sensitivity_level
+  };
+
+  const hasCareRelation = (user.id === 'USR-012' && ['PAT-1001', 'PAT-1010'].includes(patientId)) ||
+                          (user.id === 'USR-004' && ['PAT-1001', 'PAT-1002', 'PAT-1007', 'PAT-1010'].includes(patientId)) ||
+                          (user.id === 'USR-013' && ['PAT-1003', 'PAT-1006', 'PAT-1008', 'PAT-1011'].includes(patientId)) ||
+                          (user.id === 'USR-014' && ['PAT-1004', 'PAT-1005', 'PAT-1009'].includes(patientId));
+  const hasCrossWardAssignment = temporaryAssignments.has(`${user.id}:${patientId}`) || (user.id === 'USR-014' && patientId === 'PAT-1012');
+
+  const result = evaluatePolicy(user, formattedPatient, action, {
+    hasCareRelation,
+    hasCrossWardAssignment,
+    emergency
+  });
 
   const event = auditVault.logEvent({
     user,
-    patient,
+    patient: formattedPatient,
     action: action.toUpperCase(),
     decision: result.decision,
     reasonCode: result.reasonCode,
@@ -136,17 +248,19 @@ app.post('/api/access/check', (req, res) => {
   });
 });
 
-// POST /api/break-glass/start (Section 11)
+// --- 8. EMERGENCY BREAK GLASS (Section 13) ---
 app.post('/api/break-glass/start', (req, res) => {
   const { patientId, reason } = req.body;
   const { user, deviceId } = resolveContext(req);
-  const patient = PATIENTS.find(p => p.id === patientId);
+  const patient = SEED_PATIENTS.find(p => p.id === patientId);
 
-  const result = evaluatePolicy(user, patient, 'view', { emergency: true });
+  if (!patient) return res.status(404).json({ decision: 'deny', reasonCode: 'INVALID_PATIENT' });
+
+  const result = evaluatePolicy(user, { id: patient.id, ward: patient.current_ward_id, sensitivity: patient.sensitivity_level }, 'view', { emergency: true });
 
   const event = auditVault.logEvent({
     user,
-    patient,
+    patient: { id: patient.id, sensitivity: patient.sensitivity_level },
     action: 'BREAK_GLASS_START',
     decision: result.decision,
     reasonCode: result.reasonCode,
@@ -155,12 +269,26 @@ app.post('/api/break-glass/start', (req, res) => {
   });
 
   if (result.decision === 'ALLOW') {
+    const session = {
+      sessionId: `BG-SESS-${Date.now()}`,
+      userId: user.id,
+      patientId: patient.id,
+      reason: reason || 'Emergency care required',
+      startedAt: new Date().toISOString(),
+      expiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString()
+    };
+    activeBreakGlass.set(patient.id, session);
+
     alertDetector.addAlert(
       'HIGH',
       'Emergency break-glass access invoked',
       user.id,
       user.name,
-      [`Clinician ${user.name} declared break-glass for ${patientId}`, `Reason: "${reason || 'Emergency care'}"`]
+      [
+        `Clinician ${user.name} declared break-glass for ${patient.name} (${patientId})`,
+        `Declared reason: "${reason || 'Emergency clinical care'}"`
+      ],
+      [event.eventId]
     );
   }
 
@@ -173,46 +301,165 @@ app.post('/api/break-glass/start', (req, res) => {
   });
 });
 
-// GET /api/audit/events
-app.get('/api/audit/events', (req, res) => {
-  res.json({ events: auditVault.events, checkpoint: auditVault.getCheckpoint() });
+app.post('/api/break-glass/reason', (req, res) => {
+  const { patientId, reason } = req.body;
+  const { user, deviceId } = resolveContext(req);
+
+  const event = auditVault.logEvent({
+    user,
+    patient: { id: patientId, sensitivity: 'standard' },
+    action: 'BREAK_GLASS_REASON',
+    decision: 'ALLOW',
+    reasonCode: 'EMERGENCY_REASON_CAPTURED',
+    emergency: true,
+    deviceId
+  });
+
+  res.json({ status: 'REASON_RECORDED', eventId: event.eventId });
 });
 
-// POST /api/audit/verify (Section 10.4)
+app.post('/api/break-glass/end', (req, res) => {
+  const { patientId } = req.body;
+  const { user, deviceId } = resolveContext(req);
+
+  activeBreakGlass.delete(patientId);
+
+  const event = auditVault.logEvent({
+    user,
+    patient: { id: patientId, sensitivity: 'standard' },
+    action: 'BREAK_GLASS_ENDED',
+    decision: 'ALLOW',
+    reasonCode: 'EMERGENCY_SESSION_CLOSED',
+    emergency: false,
+    deviceId
+  });
+
+  res.json({ status: 'SESSION_TERMINATED', eventId: event.eventId });
+});
+
+app.get('/api/break-glass/active', (req, res) => {
+  res.json(Array.from(activeBreakGlass.values()));
+});
+
+// --- 9. AUDIT VAULT & TAMPER EVIDENCE (Section 15 & 16) ---
+app.get('/api/audit/events', (req, res) => {
+  res.json({
+    events: auditVault.events,
+    checkpoint: auditVault.getCheckpoint()
+  });
+});
+
+app.get('/api/audit/events/:id', (req, res) => {
+  const event = auditVault.events.find(e => e.eventId === req.params.id);
+  if (!event) return res.status(404).json({ error: 'Audit event not found' });
+  res.json(event);
+});
+
 app.post('/api/audit/verify', (req, res) => {
   const verification = auditVault.verify();
   res.json(verification);
 });
 
-// GET /api/security/alerts
+app.post('/api/audit/tamper', (req, res) => {
+  auditVault.stageTampering();
+  res.json({ message: 'Audit tamper simulation staged.' });
+});
+
+// --- 10. SECURITY CENTER & ALERTS (Section 18) ---
 app.get('/api/security/alerts', (req, res) => {
   res.json(alertDetector.getAlerts());
 });
 
-// GET /api/downtime/patients/:id (Section 13)
+app.get('/api/security/alerts/:id', (req, res) => {
+  const alert = alertDetector.getAlerts().find(a => a.alertId === req.params.id);
+  if (!alert) return res.status(404).json({ error: 'Alert not found' });
+  res.json(alert);
+});
+
+app.patch('/api/security/alerts/:id', (req, res) => {
+  const { status } = req.body; // OPEN | ACKNOWLEDGED | UNDER_REVIEW | RESOLVED
+  const alert = alertDetector.getAlerts().find(a => a.alertId === req.params.id);
+  if (!alert) return res.status(404).json({ error: 'Alert not found' });
+
+  alert.status = status;
+  const { user, deviceId } = resolveContext(req);
+  auditVault.logEvent({
+    user,
+    patient: { id: 'SYSTEM', sensitivity: 'standard' },
+    action: 'ROLE_CHANGE',
+    decision: 'ALLOW',
+    reasonCode: `ALERT_STATUS_UPDATED_${status}`,
+    deviceId
+  });
+
+  res.json(alert);
+});
+
+// --- 11. RESTRICTED DOWNTIME MODE (Section 20) ---
+app.get('/api/downtime/status', (req, res) => {
+  res.json({
+    downtimeActive: false,
+    emergencyCacheAvailable: true,
+    cachePatientId: 'PAT-1010'
+  });
+});
+
 app.get('/api/downtime/patients/:id', (req, res) => {
   if (req.params.id === 'PAT-1010') {
     return res.json({
       id: 'PAT-1010',
-      name: 'Patient Juliet',
-      allergies: ['Penicillin'],
-      activeMedications: ['Insulin glargine'],
+      name: 'Patient Juliet (Yewande Alabi)',
+      allergies: ['Penicillin', 'Sulfa'],
+      activeMedications: ['Insulin glargine 10u bedtime', 'Metformin 500mg BD'],
       bloodGroup: 'O positive',
-      alert: 'Hypoglycaemia risk'
+      alert: 'Hypoglycaemia risk & critical insulin dependent'
     });
   }
-  res.status(403).json({ decision: 'deny', reasonCode: 'OFFLINE_SCOPE_RESTRICTED' });
+  res.status(403).json({ decision: 'deny', reasonCode: 'OFFLINE_SCOPE_RESTRICTED', detail: 'Downtime mode restricts cached offline summaries to pre-provisioned emergency patient records.' });
 });
 
-// Catch-all route to serve index.html for root path and frontend routing
+app.post('/api/downtime/events', (req, res) => {
+  res.json({ status: 'QUEUED', localId: req.body.localId || `OFF-${Date.now()}` });
+});
+
+app.post('/api/downtime/sync', (req, res) => {
+  const { queue = [] } = req.body;
+  const { user, deviceId } = resolveContext(req);
+
+  const syncedEvents = queue.map((q, idx) => {
+    return auditVault.logEvent({
+      user,
+      patient: { id: q.patientId || 'PAT-1010', sensitivity: 'standard' },
+      action: 'OFFLINE_SYNC',
+      decision: 'ALLOW',
+      reasonCode: 'DOWNTIME_EVENT_SYNCHRONIZED',
+      deviceId: q.deviceId || deviceId
+    });
+  });
+
+  res.json({
+    status: 'SYNC_COMPLETE',
+    syncedCount: syncedEvents.length,
+    events: syncedEvents
+  });
+});
+
+// Catch-all route to serve index.html for client-side routing
 app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'index.html'));
+  if (req.path.startsWith('/api')) {
+    return res.status(404).json({ error: 'Endpoint not found' });
+  }
+  res.sendFile(path.join(distPath, 'index.html'), (err) => {
+    if (err) {
+      res.sendFile(path.join(__dirname, 'index.html'));
+    }
+  });
 });
 
-// Start Express Server if invoked directly
+// Start Express Server
 if (require.main === module) {
   app.listen(PORT, () => {
-    console.log(`ContextGuard Node.js Express server running on port ${PORT}`);
+    console.log(`ContextGuard Node.js Express Security Gateway running on port ${PORT}`);
   });
 }
 

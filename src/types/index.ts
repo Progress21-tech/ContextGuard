@@ -17,6 +17,17 @@ export interface Patient {
   purpose: string;
 }
 
+export interface PatientRecord {
+  id: string;
+  patientId: string;
+  recordType: string;
+  sensitivity: string;
+  allergies: string[];
+  activeMedications: string[];
+  diagnoses: string[];
+  clinicalNotes: string;
+}
+
 export interface AuditEvent {
   eventId: string;
   seq: number;
@@ -45,7 +56,7 @@ export interface SecurityAlert {
   actorName: string;
   signals: string[];
   openedAt: string;
-  status: 'OPEN' | 'REVIEWED';
+  status: 'OPEN' | 'ACKNOWLEDGED' | 'UNDER_REVIEW' | 'RESOLVED';
   relatedEvents: string[];
 }
 
