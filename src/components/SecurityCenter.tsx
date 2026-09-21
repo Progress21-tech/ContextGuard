@@ -3,10 +3,11 @@ import { SecurityAlert } from '../types';
 
 interface SecurityCenterProps {
   alerts: SecurityAlert[];
+  onUpdateStatus?: (alertId: string, status: 'OPEN' | 'ACKNOWLEDGED' | 'UNDER_REVIEW' | 'RESOLVED') => void;
   onClear: () => void;
 }
 
-export const SecurityCenter: React.FC<SecurityCenterProps> = ({ alerts, onClear }) => {
+export const SecurityCenter: React.FC<SecurityCenterProps> = ({ alerts, onUpdateStatus, onClear }) => {
   return (
     <section id="security" className="view active">
       <div className="view-heading">
@@ -23,9 +24,21 @@ export const SecurityCenter: React.FC<SecurityCenterProps> = ({ alerts, onClear 
           alerts.map(a => (
             <article key={a.alertId} className={`alert ${a.severity.toLowerCase()}`}>
               <div className="alert-icon">{a.severity === 'CRITICAL' ? '⚠️' : a.severity === 'HIGH' ? '🚨' : '◈'}</div>
-              <div>
-                <h3>{a.title} <small style={{ float: 'right', font: '10px "DM Mono"', fontWeight: 700 }}>[{a.severity}]</small></h3>
+              <div style={{ flex: 1 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                  <h3 style={{ margin: 0 }}>{a.title}</h3>
+                  <span className={`chip ${a.status === 'RESOLVED' ? 'safe' : a.status === 'UNDER_REVIEW' ? 'warning' : 'danger'}`}>
+                    {a.status || 'OPEN'}
+                  </span>
+                </div>
                 <p>{a.signals.join(' · ')}</p>
+                {onUpdateStatus && (
+                  <div style={{ marginTop: '10px', display: 'flex', gap: '6px' }}>
+                    <button className="ghost-button" style={{ fontSize: '10px', padding: '4px 8px' }} onClick={() => onUpdateStatus(a.alertId, 'ACKNOWLEDGED')}>Acknowledge</button>
+                    <button className="ghost-button" style={{ fontSize: '10px', padding: '4px 8px' }} onClick={() => onUpdateStatus(a.alertId, 'UNDER_REVIEW')}>Under Review</button>
+                    <button className="primary-button" style={{ fontSize: '10px', padding: '4px 8px' }} onClick={() => onUpdateStatus(a.alertId, 'RESOLVED')}>Resolve Alert</button>
+                  </div>
+                )}
               </div>
               <small>{a.openedAt}</small>
             </article>
