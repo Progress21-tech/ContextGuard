@@ -5,6 +5,7 @@
 
 const express = require('express');
 const cors = require('cors');
+const path = require('path');
 const { evaluatePolicy } = require('./backend/policies/evaluator');
 const { AuditVaultService } = require('./backend/audit/vault');
 const { AlertDetectorService } = require('./backend/alerts/detector');
@@ -14,7 +15,7 @@ const PORT = process.env.PORT || 3000;
 
 app.use(cors());
 app.use(express.json());
-app.use(express.static('.'));
+app.use(express.static(path.join(__dirname)));
 
 // --- FIXTURES IN MEMORY DATASTORE ---
 const USERS = [
@@ -174,10 +175,6 @@ app.post('/api/break-glass/start', (req, res) => {
 
 // GET /api/audit/events
 app.get('/api/audit/events', (req, res) => {
-  const { user } = resolveContext(req);
-  if (['security officer', 'system admin'].includes(user.role)) {
-    return res.json({ events: auditVault.events, checkpoint: auditVault.getCheckpoint() });
-  }
   res.json({ events: auditVault.events, checkpoint: auditVault.getCheckpoint() });
 });
 
@@ -205,6 +202,11 @@ app.get('/api/downtime/patients/:id', (req, res) => {
     });
   }
   res.status(403).json({ decision: 'deny', reasonCode: 'OFFLINE_SCOPE_RESTRICTED' });
+});
+
+// Catch-all route to serve index.html for root path and frontend routing
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, 'index.html'));
 });
 
 // Start Express Server if invoked directly
