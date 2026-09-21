@@ -290,22 +290,7 @@ TOTAL FAILED: 0
 
 ---
 
-## 11. Demonstration Runbook (6-7 Minutes)
-
-| Time | Beat | Demonstration Actions & What Judges See |
-| --- | --- | --- |
-| **0:00-0:40** | **Problem setup** | Show synthetic hospital, roles, and current duty status. State that access asks whether access makes sense *now*, not merely whether the user is a doctor. |
-| **0:40-1:30** | **Normal access** | Dr. David Ade opens Patient Alpha (`PAT-1001`). Show `ALLOW` and `ACTIVE_TREATMENT_RELATIONSHIP` reason. |
-| **1:30-2:30** | **Unauthorized browsing** | Select Ada Nwosu (Records Clerk), open Patient Bravo (`PAT-1002`). Show `DENY / SENSITIVITY_RESTRICTED`. Run **Simulate clerk browsing** to produce a `MEDIUM` review signal in Security Center. |
-| **2:30-3:30** | **Compromised account** | Run **Simulate compromised account** (Dr. David Ade off duty on device `MOB-19` requesting burst access). Show explainable `HIGH-RISK` alert. |
-| **3:30-4:30** | **Emergency break-glass** | Dr. David Ade opens Patient Echo (`PAT-1005`, Cardiology). Normal policy denies; invoke **Grant 15-Minute Emergency Access** with mandatory reason. Show narrow scope and sealed critical audit event. |
-| **4:30-5:20** | **Tamper evidence** | Click **Stage audit tampering**, navigate to Audit Vault, and click **Verify integrity**. Show red `INTEGRITY FAILURE` banner with hash divergence and checkpoint mismatch. |
-| **5:20-6:10** | **Downtime continuity** | Toggle **Network online** off. Open emergency summary for Patient Juliet (`PAT-1010`). Re-enable network to demonstrate queued event sync. |
-| **6:10-6:40** | **Close & Test Suite** | Click **Run 30 PRD Acceptance Tests** to render the green 30/30 verification table. State closing line: *"ContextGuard adds a context-aware security and accountability layer that decides whether access makes sense now, provides controlled emergency exceptions, detects suspicious use, and preserves evidence of what happened."* |
-
----
-
-## 12. Project Structure & Codebase Map
+## 11. Project Structure & Codebase Map
 
 ```text
 ContextGuard/
@@ -342,7 +327,7 @@ ContextGuard/
 
 ---
 
-## 13. Standards & Research Sources Mapping (Section 19)
+## 12. Standards & Research Sources Mapping (Section 19)
 
 - **NIST SP 800-207**: Zero Trust Architecture; no implicit trust based on network location; separate PEP/PDP architecture [12].
 - **OWASP Authorization Cheat Sheet**: Least privilege, deny by default, server-side authorization enforcement [13].
@@ -355,7 +340,7 @@ ContextGuard/
 
 ---
 
-## 14. Definition of Done (Appendix D)
+## 13. Definition of Done (Appendix D)
 
 The project is complete and demo-ready when a judge can observe one uninterrupted scenario demonstrating:
 1. Context-aware authorization decisions.
