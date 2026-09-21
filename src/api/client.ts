@@ -1,6 +1,7 @@
 import { User, Patient, PatientRecord, AuditEvent, SecurityAlert, PolicyResult, Checkpoint } from '../types';
 
-const API_BASE = '/api';
+const BASE_URL = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
+const API_BASE = `${BASE_URL}/api`;
 
 export async function fetchUsers(): Promise<User[]> {
   try {
