@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { AuditEvent, Checkpoint } from '../types';
+import { CircleCheck, ShieldAlert, Shield, RefreshCw } from './icons';
 
 interface AuditVaultProps {
   events: AuditEvent[];
@@ -14,11 +15,17 @@ export const AuditVault: React.FC<AuditVaultProps> = ({ events, checkpoint, tamp
     <section id="audit" className="view active">
       <div className="view-heading">
         <div>
-          <p className="eyebrow">SEPARATE EVIDENCE STORE</p>
+          <p className="eyebrow" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <Shield size={14} aria-hidden="true" />
+            SEPARATE EVIDENCE STORE
+          </p>
           <h1>Audit vault</h1>
           <p>Every decision produces a canonical SHA-256 hash-chained event with signed checkpoints for tamper evidence.</p>
         </div>
-        <button className="primary-button" onClick={onVerify}>Verify integrity</button>
+        <button className="primary-button" onClick={onVerify} aria-label="Verify Cryptographic Hash Chain Integrity">
+          <RefreshCw size={15} style={{ marginRight: '6px' }} aria-hidden="true" />
+          Verify integrity
+        </button>
       </div>
 
       <div className="metrics">
@@ -42,16 +49,22 @@ export const AuditVault: React.FC<AuditVaultProps> = ({ events, checkpoint, tamp
       {verifyStatus && (
         <div className={`verification ${verifyStatus.valid ? 'ok' : 'fail'}`}>
           {verifyStatus.valid ? (
-            <>
-              <strong>✓ Cryptographic Integrity Verified</strong><br />
-              Every event correctly links to its predecessor. Signed Checkpoint <code>{checkpoint.signature}</code> matches root hash across all {events.length} events.
-            </>
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
+              <CircleCheck size={20} color="#16745e" style={{ marginTop: '2px', flexShrink: 0 }} aria-hidden="true" />
+              <div>
+                <strong>Cryptographic Integrity Verified</strong><br />
+                Every event correctly links to its predecessor. Signed Checkpoint <code>{checkpoint.signature}</code> matches root hash across all {events.length} events.
+              </div>
+            </div>
           ) : (
-            <>
-              <strong>🚨 Cryptographic Integrity Failure Detected!</strong><br />
-              {verifyStatus.reason}<br />
-              Signed checkpoint verification failed. Preserve database snapshot for security investigation.
-            </>
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
+              <ShieldAlert size={20} color="#a23c45" style={{ marginTop: '2px', flexShrink: 0 }} aria-hidden="true" />
+              <div>
+                <strong>Cryptographic Integrity Failure Detected!</strong><br />
+                {verifyStatus.reason}<br />
+                Signed checkpoint verification failed. Preserve database snapshot for security investigation.
+              </div>
+            </div>
           )}
         </div>
       )}

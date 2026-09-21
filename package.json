@@ -1,7 +1,7 @@
 {
   "name": "contextguard",
   "version": "1.0.0",
-  "description": "Context-Aware Clinical Access, Emergency Accountability and Tamper-Evident Audit",
+  "description": "Context aware security and accountability layer for hospital records with emergency break glass, tamper evident auditing, explainable access monitoring, downtime support and EMR adapter architecture.",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
@@ -17,7 +17,8 @@
     "react-dom": "^18.3.1",
     "sqlite3": "^5.1.7",
     "bcryptjs": "^2.4.3",
-    "jsonwebtoken": "^9.0.2"
+    "jsonwebtoken": "^9.0.2",
+    "lucide-react": "^0.378.0"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",

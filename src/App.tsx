@@ -27,6 +27,7 @@ import { SecurityCenter } from './components/SecurityCenter';
 import { DowntimeCache } from './components/DowntimeCache';
 import { BreakGlassModal } from './components/BreakGlassModal';
 import { TestRunnerModal } from './components/TestRunnerModal';
+import { Menu, FileText, Database, Activity, Shield, Plug, CircleCheck, CircleX } from './components/icons';
 
 export const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -275,13 +276,13 @@ export const App: React.FC = () => {
         valid: true,
         checkpoint: checkpoint
       });
-      showToast('Audit Vault Cryptographic Verification: PASSED ✓');
+      showToast('Audit Vault Cryptographic Verification: PASSED [VERIFIED]');
     } else {
       setVerifyStatus({
         valid: false,
         reason: res.reason || 'Cryptographic hash mismatch detected.'
       });
-      showToast('Audit Vault Cryptographic Verification: INTEGRITY FAILURE 🚨');
+      showToast('Audit Vault Cryptographic Verification: INTEGRITY FAILURE DETECTED');
     }
   };
 
@@ -334,19 +335,24 @@ export const App: React.FC = () => {
         </div>
         <nav aria-label="Primary navigation">
           <button className={`nav-item ${activeTab === 'workspace' ? 'active' : ''}`} onClick={() => navTo('workspace')}>
-            <span>▣</span>Clinical workspace
+            <FileText size={16} style={{ marginRight: '8px' }} aria-hidden="true" />
+            Clinical workspace
           </button>
           <button className={`nav-item ${activeTab === 'audit' ? 'active' : ''}`} onClick={() => navTo('audit')}>
-            <span>◫</span>Audit vault
+            <Shield size={16} style={{ marginRight: '8px' }} aria-hidden="true" />
+            Audit vault
           </button>
           <button className={`nav-item ${activeTab === 'security' ? 'active' : ''}`} onClick={() => navTo('security')}>
-            <span>◈</span>Security center <b>{alerts.filter(a => a.status !== 'RESOLVED').length}</b>
+            <Activity size={16} style={{ marginRight: '8px' }} aria-hidden="true" />
+            Security center <b style={{ marginLeft: 'auto' }}>{alerts.filter(a => a.status !== 'RESOLVED').length}</b>
           </button>
           <button className={`nav-item ${activeTab === 'offline' ? 'active' : ''}`} onClick={() => navTo('offline')}>
-            <span>◌</span>Downtime cache
+            <Database size={16} style={{ marginRight: '8px' }} aria-hidden="true" />
+            Downtime cache
           </button>
           <button className={`nav-item ${activeTab === 'integrations' ? 'active' : ''}`} onClick={() => navTo('integrations')}>
-            <span>⚡</span>EMR connectors
+            <Plug size={16} style={{ marginRight: '8px' }} aria-hidden="true" />
+            EMR connectors
           </button>
         </nav>
         <div className="sidebar-bottom">
@@ -365,7 +371,7 @@ export const App: React.FC = () => {
         <header className="topbar">
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <button className="mobile-nav-toggle" onClick={() => setMobileNavOpen(!mobileNavOpen)} aria-label="Toggle navigation menu">
-              ☰
+              <Menu size={18} aria-hidden="true" />
             </button>
             <div id="crumb">
               <span>{activeTab === 'workspace' ? 'Clinical workspace' : activeTab === 'audit' ? 'Audit vault' : activeTab === 'security' ? 'Security center' : activeTab === 'offline' ? 'Downtime cache' : 'EMR Connectors'}</span>
@@ -461,7 +467,7 @@ export const App: React.FC = () => {
 
                 {emrResponse && (
                   <div style={{ marginTop: '12px', background: '#133535', padding: '12px', borderRadius: '8px', border: '1px solid #235454', fontSize: '10px', fontFamily: 'DM Mono' }}>
-                    <span style={{ color: '#83e4aa', fontWeight: 700 }}>✓ EMR Adapter Gate Response:</span>
+                    <span style={{ color: '#83e4aa', fontWeight: 700 }}>EMR Adapter Gate Response:</span>
                     <pre style={{ margin: '6px 0 0', overflow: 'auto', maxHeight: '120px', color: '#d3e6e1' }}>
                       {JSON.stringify(emrResponse, null, 2)}
                     </pre>
