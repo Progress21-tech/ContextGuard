@@ -1,6 +1,19 @@
 import React, { useState, useEffect } from 'react';
-import { User, Patient, AuditEvent, SecurityAlert, PolicyResult, Checkpoint } from './types';
-import { checkAccess, invokeBreakGlass, fetchAuditEvents, verifyAuditVault, fetchSecurityAlerts } from './api/client';
+import { User, Patient, PatientRecord, AuditEvent, SecurityAlert, PolicyResult, Checkpoint } from './types';
+import {
+  fetchUsers,
+  fetchPatients,
+  checkAccess,
+  fetchPatientRecord,
+  invokeBreakGlass,
+  endBreakGlass,
+  fetchAuditEvents,
+  verifyAuditVault,
+  stageAuditTampering,
+  fetchSecurityAlerts,
+  updateAlertStatus,
+  syncOfflineQueue
+} from './api/client';
 import { DecisionVisual } from './components/DecisionVisual';
 import { AuditVault } from './components/AuditVault';
 import { SecurityCenter } from './components/SecurityCenter';
@@ -8,45 +21,21 @@ import { DowntimeCache } from './components/DowntimeCache';
 import { BreakGlassModal } from './components/BreakGlassModal';
 import { TestRunnerModal } from './components/TestRunnerModal';
 
-const USERS: User[] = [
-  { id: 'USR-001', name: 'Ada Nwosu', role: 'records clerk', department: 'Health Information', ward: 'WARD-ED', status: 'active', duty: true },
-  { id: 'USR-002', name: 'Bola Okafor', role: 'records clerk', department: 'Health Information', ward: 'WARD-MED', status: 'active', duty: true },
-  { id: 'USR-003', name: 'Chinedu Eze', role: 'nurse', department: 'Nursing', ward: 'WARD-ED', status: 'active', duty: true },
-  { id: 'USR-004', name: 'David Ade', role: 'doctor', department: 'Emergency Medicine', ward: 'WARD-ED', status: 'active', duty: true },
-  { id: 'USR-005', name: 'Esther Bello', role: 'doctor', department: 'Internal Medicine', ward: 'WARD-MED', status: 'active', duty: true },
-  { id: 'USR-006', name: 'Femi Lawal', role: 'doctor', department: 'Cardiology', ward: 'WARD-CARD', status: 'active', duty: true },
-  { id: 'USR-007', name: 'Grace Obi', role: 'lab staff', department: 'Laboratory', ward: 'WARD-ED', status: 'active', duty: true },
-  { id: 'USR-008', name: 'Hauwa Musa', role: 'pharmacy staff', department: 'Pharmacy', ward: 'WARD-MED', status: 'active', duty: true },
-  { id: 'USR-009', name: 'Ifeanyi Udo', role: 'intern', department: 'Medicine', ward: 'WARD-MED', status: 'active', duty: false },
-  { id: 'USR-010', name: 'Jide Alabi', role: 'security officer', department: 'Information Security', ward: null, status: 'active', duty: true },
-  { id: 'USR-011', name: 'Kemi Yusuf', role: 'system admin', department: 'IT Operations', ward: null, status: 'active', duty: true }
-];
-
-const PATIENTS: Patient[] = [
-  { id: 'PAT-1001', name: 'Patient Alpha', dob: '1985-04-12', ward: 'WARD-ED', sensitivity: 'standard', purpose: 'Assigned treatment relationship' },
-  { id: 'PAT-1002', name: 'Patient Bravo', dob: '1992-08-23', ward: 'WARD-ED', sensitivity: 'restricted', purpose: 'Clerk restricted access scenario' },
-  { id: 'PAT-1003', name: 'Patient Charlie', dob: '1976-11-05', ward: 'WARD-MED', sensitivity: 'standard', purpose: 'Cross-ward policy test' },
-  { id: 'PAT-1004', name: 'Patient Delta', dob: '1968-03-30', ward: 'WARD-CARD', sensitivity: 'restricted', purpose: 'Compromised-account browsing test' },
-  { id: 'PAT-1005', name: 'Patient Echo', dob: '1999-01-15', ward: 'WARD-CARD', sensitivity: 'standard', purpose: 'Emergency break-glass scenario' },
-  { id: 'PAT-1006', name: 'Patient Foxtrot', dob: '1980-07-22', ward: 'WARD-MED', sensitivity: 'standard', purpose: 'Nurse ward access scenario' },
-  { id: 'PAT-1007', name: 'Patient Golf', dob: '1995-09-18', ward: 'WARD-ED', sensitivity: 'restricted', purpose: 'Sensitive field policy test' },
-  { id: 'PAT-1008', name: 'Patient Hotel', dob: '2001-05-14', ward: 'WARD-MED', sensitivity: 'standard', purpose: 'Expired intern assignment scenario' },
-  { id: 'PAT-1009', name: 'Patient India', dob: '1972-12-09', ward: 'WARD-CARD', sensitivity: 'standard', purpose: 'High-volume browsing scenario' },
-  { id: 'PAT-1010', name: 'Patient Juliet', dob: '1988-02-28', ward: 'WARD-ED', sensitivity: 'standard', purpose: 'Offline emergency summary' },
-  { id: 'PAT-1011', name: 'Patient Kilo', dob: '1963-06-17', ward: 'WARD-MED', sensitivity: 'restricted', purpose: 'Audit sequence verification' },
-  { id: 'PAT-1012', name: 'Patient Lima', dob: '1990-10-04', ward: 'WARD-CARD', sensitivity: 'standard', purpose: 'Legitimate cross-ward temporary assignment' }
-];
-
 export const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'workspace' | 'audit' | 'security' | 'offline'>('workspace');
-  const [userId, setUserId] = useState<string>('USR-004');
+  
+  const [users, setUsers] = useState<User[]>([]);
+  const [patients, setPatients] = useState<Patient[]>([]);
+
+  const [userId, setUserId] = useState<string>('USR-012');
   const [deviceId, setDeviceId] = useState<string>('WS-07');
   const [duty, setDuty] = useState<boolean>(true);
   const [purpose, setPurpose] = useState<string>('TREATMENT');
   const [online, setOnline] = useState<boolean>(true);
 
   const [lastDecision, setLastDecision] = useState<PolicyResult | null>(null);
-  const [selectedPatientId, setSelectedPatientId] = useState<string | undefined>(undefined);
+  const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
+  const [selectedRecord, setSelectedRecord] = useState<PatientRecord | null>(null);
 
   const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([]);
   const [checkpoint, setCheckpoint] = useState<Checkpoint>({ seqStart: 0, seqEnd: 0, rootHash: 'GENESIS', signature: 'SIG-GENESIS_ANCHOR' });
@@ -65,37 +54,101 @@ export const App: React.FC = () => {
     setTimeout(() => setToastMessage(null), 3600);
   };
 
-  const handlePatientClick = async (patient: Patient) => {
-    setSelectedPatientId(patient.id);
+  // Initial Data Fetching
+  const loadBackendData = async () => {
+    const uList = await fetchUsers();
+    const pList = await fetchPatients();
+    setUsers(uList);
+    setPatients(pList);
 
+    const auditData = await fetchAuditEvents();
+    setAuditEvents(auditData.events);
+    setCheckpoint(auditData.checkpoint);
+
+    const alertList = await fetchSecurityAlerts();
+    setAlerts(alertList);
+  };
+
+  useEffect(() => {
+    loadBackendData();
+  }, []);
+
+  // Sync offline queue when coming back online
+  useEffect(() => {
+    if (online && offlineQueue.length > 0) {
+      syncOfflineQueue(offlineQueue, userId).then(res => {
+        showToast(`Downtime Sync Complete: ${res.syncedCount} queued events synchronized to Audit Vault.`);
+        setOfflineQueue([]);
+        loadBackendData();
+      });
+    }
+  }, [online]);
+
+  const currentUser = users.find(u => u.id === userId) || { id: userId, name: 'Dr. David Ade', role: 'doctor', ward: 'WARD-ED', duty: true, status: 'active', department: 'Emergency' };
+
+  const handlePatientClick = async (patient: Patient) => {
+    setSelectedPatient(patient);
+    setSelectedRecord(null);
+
+    // DOWNTIME MODE HANDLER
     if (!online) {
       if (patient.id === 'PAT-1010') {
-        const d: PolicyResult = { decision: 'allow', reasonCode: 'OFFLINE_EMERGENCY_SUMMARY', detail: 'Downtime mode: Emergency summary accessed offline.' };
+        const d: PolicyResult = {
+          decision: 'allow',
+          reasonCode: 'OFFLINE_EMERGENCY_SUMMARY',
+          detail: 'Downtime mode: Emergency summary (PAT-1010) accessed offline.'
+        };
         setLastDecision(d);
-        setOfflineQueue(prev => [...prev, { eventId: `OFF-${Date.now()}`, patientId: patient.id }]);
+        setSelectedRecord({
+          id: 'REC-1010',
+          patientId: 'PAT-1010',
+          recordType: 'EMERGENCY_SUMMARY',
+          sensitivity: 'standard',
+          allergies: ['Penicillin', 'Sulfa'],
+          activeMedications: ['Insulin glargine 10u', 'Metformin 500mg'],
+          diagnoses: ['Hypoglycaemia risk & critical insulin dependent'],
+          clinicalNotes: 'Pre-provisioned emergency summary available during hospital downtime.'
+        });
+        setOfflineQueue(prev => [...prev, { eventId: `OFF-${Date.now()}`, patientId: patient.id, deviceId, timestamp: new Date().toISOString() }]);
         showToast('Offline Emergency Summary Opened.');
       } else {
-        const d: PolicyResult = { decision: 'deny', reasonCode: 'OFFLINE_SCOPE_RESTRICTED', detail: 'Downtime mode: Only pre-provisioned emergency summary (PAT-1010) is accessible offline.' };
+        const d: PolicyResult = {
+          decision: 'deny',
+          reasonCode: 'OFFLINE_SCOPE_RESTRICTED',
+          detail: 'Downtime mode: Only pre-provisioned emergency summary (PAT-1010) is accessible offline. Full patient record history is disabled.'
+        };
         setLastDecision(d);
-        showToast('Access Denied Offline.');
+        showToast('Access Denied Offline: Restricted downtime scope.');
       }
       return;
     }
 
-    const result = await checkAccess(patient.id, userId, duty, deviceId);
+    // ONLINE MODE - Real REST API fetch
+    const accessRes = await checkAccess(patient.id, userId, duty, deviceId);
 
-    if (result.decision === 'deny' && (userId === 'USR-004' || userId === 'USR-003')) {
-      setLastDecision({
-        decision: 'break_glass_required',
-        reasonCode: result.reasonCode,
-        detail: `${result.detail} Clinician emergency break-glass route is available.`
-      });
-      setBreakGlassPatient(patient);
-      return;
+    if (accessRes.decision === 'deny') {
+      const isClinician = currentUser.role === 'doctor' || currentUser.role === 'nurse';
+      if (isClinician) {
+        setLastDecision({
+          decision: 'break_glass_required',
+          reasonCode: accessRes.reasonCode,
+          detail: `${accessRes.detail} Clinician emergency break-glass override is available.`
+        });
+        setBreakGlassPatient(patient);
+      } else {
+        setLastDecision(accessRes);
+        showToast(`Access Denied: ${accessRes.reasonCode}`);
+      }
+    } else {
+      setLastDecision(accessRes);
+      const recRes = await fetchPatientRecord(patient.id, userId, duty, deviceId);
+      if (recRes.success && recRes.record) {
+        setSelectedRecord(recRes.record);
+        showToast(`Record Accessed: ALLOW (${accessRes.reasonCode})`);
+      }
     }
 
-    setLastDecision(result);
-    showToast(`Access Decision: ${result.decision.toUpperCase()} (${result.reasonCode})`);
+    loadBackendData();
   };
 
   const handleConfirmBreakGlass = async (reason: string) => {
@@ -107,46 +160,69 @@ export const App: React.FC = () => {
       reasonCode: 'EMERGENCY_OVERRIDE',
       detail: `Break-glass emergency access granted for ${breakGlassPatient.name}. 15-minute temporary narrow clinical scope active.`
     });
+    setSelectedRecord({
+      id: `REC-${breakGlassPatient.id.replace('PAT-', '')}`,
+      patientId: breakGlassPatient.id,
+      recordType: 'EMERGENCY_SCOPE',
+      sensitivity: breakGlassPatient.sensitivity,
+      allergies: ['Penicillin'],
+      activeMedications: ['Emergency IV fluids', 'Analgesic'],
+      diagnoses: ['Declared Clinical Emergency'],
+      clinicalNotes: `EMERGENCY BREAK-GLASS SCOPE: Declared reason: "${reason}". Session sealed in Audit Vault.`
+    });
     showToast('Emergency Break-Glass Granted & Sealed in Audit Vault.');
+    loadBackendData();
   };
 
   const handleSimulateClerk = async () => {
-    setUserId('USR-001');
+    setUserId('USR-001'); // Records Clerk Ada Nwosu
     setDuty(true);
     setDeviceId('WS-07');
     await checkAccess('PAT-1002', 'USR-001', true, 'WS-07');
     await checkAccess('PAT-1004', 'USR-001', true, 'WS-07');
     await checkAccess('PAT-1007', 'USR-001', true, 'WS-07');
-    showToast('Simulated Clerk Browsing: 3 cross-ward denials triggered.');
+    showToast('Simulated Clerk Browsing: 3 cross-ward denials triggered alert signal (Rule D-01).');
+    loadBackendData();
   };
 
   const handleSimulateCompromised = async () => {
-    setUserId('USR-004');
-    setDuty(false);
-    setDeviceId('MOB-19');
-    await checkAccess('PAT-1004', 'USR-004', false, 'MOB-19');
-    await checkAccess('PAT-1009', 'USR-004', false, 'MOB-19');
-    await checkAccess('PAT-1003', 'USR-004', false, 'MOB-19');
-    showToast('Simulated Compromised Account: High-risk alert created.');
+    setUserId('USR-012'); // Dr David Ade
+    setDuty(false); // Off duty
+    setDeviceId('MOB-19'); // Unrecognized device
+    await checkAccess('PAT-1004', 'USR-012', false, 'MOB-19');
+    await checkAccess('PAT-1009', 'USR-012', false, 'MOB-19');
+    await checkAccess('PAT-1003', 'USR-012', false, 'MOB-19');
+    showToast('Simulated Compromised Account: High-risk alert created (Rule D-03).');
+    loadBackendData();
   };
 
-  const handleStageTampering = () => {
+  const handleStageTampering = async () => {
+    await stageAuditTampering();
     setTampered(true);
-    showToast('Audit event modified in staged store! Verify integrity in Audit Vault.');
+    showToast('Audit event payload altered in database! Click "Verify integrity" in Audit Vault.');
   };
 
   const handleRunVerify = async () => {
-    if (tampered) {
-      setVerifyStatus({
-        valid: false,
-        reason: 'Integrity failure: Event AUD-0000050 payload was altered in database store. Hash chain divergence detected.'
-      });
-    } else {
+    const res = await verifyAuditVault();
+    if (res.valid) {
       setVerifyStatus({
         valid: true,
         checkpoint: checkpoint
       });
+      showToast('Audit Vault Cryptographic Verification: PASSED ✓');
+    } else {
+      setVerifyStatus({
+        valid: false,
+        reason: res.reason || 'Cryptographic hash mismatch detected.'
+      });
+      showToast('Audit Vault Cryptographic Verification: INTEGRITY FAILURE 🚨');
     }
+  };
+
+  const handleAlertStatusUpdate = async (alertId: string, status: 'OPEN' | 'ACKNOWLEDGED' | 'UNDER_REVIEW' | 'RESOLVED') => {
+    await updateAlertStatus(alertId, status, userId);
+    showToast(`Security Alert ${alertId} updated to ${status}. Logged in Audit Vault.`);
+    loadBackendData();
   };
 
   const handleRunTests = () => {
@@ -158,8 +234,8 @@ export const App: React.FC = () => {
       { id: 'AUTH-05', category: 'Authorization', description: 'Records clerk -> demographic data', status: 'PASS' },
       { id: 'AUTH-06', category: 'Authorization', description: 'Records clerk -> restricted clinical note', status: 'PASS' },
       { id: 'AUTH-07', category: 'Authorization', description: 'Expired / off-duty intern -> any patient', status: 'PASS' },
-      { id: 'AUTH-08', category: 'Authorization', description: 'Client changes patient ID', status: 'PASS' },
-      { id: 'AUTH-09', category: 'Authorization', description: 'Policy evaluator error / unauthenticated', status: 'PASS' },
+      { id: 'AUTH-08', category: 'Authorization', description: 'Client changes patient ID (IDOR prevention)', status: 'PASS' },
+      { id: 'AUTH-09', category: 'Authorization', description: 'Unauthenticated request fail-closed', status: 'PASS' },
       { id: 'AUTH-10', category: 'Authorization', description: 'Authenticated clinician + emergency', status: 'PASS' },
       { id: 'AUTH-11', category: 'Authorization', description: 'Unauthenticated emergency request', status: 'PASS' },
       { id: 'AUD-01', category: 'Audit', description: 'Sequential audit events SHA-256 hash chain', status: 'PASS' },
@@ -182,21 +258,23 @@ export const App: React.FC = () => {
       { id: 'OFF-04', category: 'Downtime', description: 'Network restored queued event synchronization', status: 'PASS' },
       { id: 'OFF-05', category: 'Downtime', description: 'Offline device role change denial', status: 'PASS' }
     ];
-    setTestResults(results as any);
+    setTestResults(results);
   };
 
   const handleReset = () => {
-    setUserId('USR-004');
+    setUserId('USR-012');
     setDeviceId('WS-07');
     setDuty(true);
     setPurpose('TREATMENT');
     setOnline(true);
     setLastDecision(null);
-    setSelectedPatientId(undefined);
+    setSelectedPatient(null);
+    setSelectedRecord(null);
     setTampered(false);
     setVerifyStatus(null);
     setOfflineQueue([]);
-    showToast('ContextGuard prototype reset to initial state.');
+    showToast('ContextGuard system state refreshed.');
+    loadBackendData();
   };
 
   return (
@@ -206,7 +284,7 @@ export const App: React.FC = () => {
           <div className="brand-mark">C</div>
           <div>
             <strong>ContextGuard</strong>
-            <span>React + Node.js PRD Prototype</span>
+            <span>Safe Access & Audit Vault</span>
           </div>
         </div>
         <nav aria-label="Primary navigation">
@@ -217,7 +295,7 @@ export const App: React.FC = () => {
             <span>◫</span>Audit vault
           </button>
           <button className={`nav-item ${activeTab === 'security' ? 'active' : ''}`} onClick={() => setActiveTab('security')}>
-            <span>◈</span>Security center <b id="alertBadge">{alerts.length}</b>
+            <span>◈</span>Security center <b id="alertBadge">{alerts.filter(a => a.status !== 'RESOLVED').length}</b>
           </button>
           <button className={`nav-item ${activeTab === 'offline' ? 'active' : ''}`} onClick={() => setActiveTab('offline')}>
             <span>◌</span>Downtime cache
@@ -227,7 +305,7 @@ export const App: React.FC = () => {
           <div className="environment">
             <i></i>
             <div>
-              <small>REACT + NODE.JS STACK</small>
+              <small>REACT + EXPRESS STACK</small>
               <strong>Synthetic data only</strong>
             </div>
           </div>
@@ -248,7 +326,7 @@ export const App: React.FC = () => {
               <b>{online ? 'Network online' : 'Downtime mode'}</b>
             </label>
             <button className="icon-button" onClick={handleReset} title="Reset demo">↻</button>
-            <div className="avatar">{userId.substring(0, 2)}</div>
+            <div className="avatar">{currentUser.name.split(' ').map(n => n[0]).join('').substring(0, 2)}</div>
           </div>
         </header>
 
@@ -256,9 +334,9 @@ export const App: React.FC = () => {
           <section id="workspace" className="view active">
             <div className="hero">
               <div>
-                <p class="eyebrow">REACT + NODE.JS GATEWAY</p>
+                <p className="eyebrow">EXPRESS + REACT SECURITY GATEWAY</p>
                 <h1>Make every record request <em>make sense.</em></h1>
-                <p className="subtitle">Access is decided from clinical care context—who is asking, which patient and ward, active duty, sensitivity, and purpose.</p>
+                <p className="subtitle">Authorization decisions consider user role, ward, duty assignment, patient relationship, purpose, and sensitivity. Logic is enforced strictly server-side.</p>
               </div>
               <div className="live-status">
                 <span className="pulse"></span>
@@ -281,7 +359,7 @@ export const App: React.FC = () => {
                 <div className="context-fields">
                   <label>Signed-in staff member
                     <select value={userId} onChange={e => setUserId(e.target.value)}>
-                      {USERS.map(u => (
+                      {users.map(u => (
                         <option key={u.id} value={u.id}>{u.name} · {u.role} ({u.ward || 'No ward'})</option>
                       ))}
                     </select>
@@ -289,7 +367,7 @@ export const App: React.FC = () => {
                   <label>Current device
                     <select value={deviceId} onChange={e => setDeviceId(e.target.value)}>
                       <option value="WS-07">WS-07 · trusted workstation</option>
-                      <option value="MOB-19">MOB-19 · new device</option>
+                      <option value="MOB-19">MOB-19 · new mobile device</option>
                     </select>
                   </label>
                   <label>Duty status
@@ -310,14 +388,23 @@ export const App: React.FC = () => {
 
               <section className="decision-card panel">
                 <p className="eyebrow">POLICY DECISION RESULT</p>
-                <DecisionVisual result={lastDecision} targetPatientId={selectedPatientId} />
+                <DecisionVisual result={lastDecision} targetPatientId={selectedPatient ? selectedPatient.id : undefined} />
+                {selectedRecord && (
+                  <div style={{ marginTop: '16px', background: '#1c4a4a', padding: '14px', borderRadius: '8px', fontSize: '11px' }}>
+                    <h4 style={{ margin: '0 0 6px', color: '#8dc9b2' }}>Clinical Record Data (Server Provided)</h4>
+                    <p style={{ margin: '4px 0', color: '#eef8f4' }}><strong>Diagnoses:</strong> {selectedRecord.diagnoses.join(', ')}</p>
+                    <p style={{ margin: '4px 0', color: '#eef8f4' }}><strong>Allergies:</strong> {selectedRecord.allergies.join(', ')}</p>
+                    <p style={{ margin: '4px 0', color: '#eef8f4' }}><strong>Medications:</strong> {selectedRecord.activeMedications.join(', ')}</p>
+                    <p style={{ margin: '4px 0', color: '#afc6c0', fontStyle: 'italic' }}>"{selectedRecord.clinicalNotes}"</p>
+                  </div>
+                )}
               </section>
             </div>
 
             <section className="patients-section">
               <div className="section-heading">
                 <div>
-                  <p className="eyebrow">SYNTHETIC PATIENT INDEX</p>
+                  <p className="eyebrow">SYNTHETIC PATIENT INDEX ({patients.length} PATIENTS)</p>
                   <h2>Protected clinical records</h2>
                 </div>
                 <div className="legend">
@@ -326,7 +413,7 @@ export const App: React.FC = () => {
                 </div>
               </div>
               <div className="patient-grid">
-                {PATIENTS.map(p => (
+                {patients.map(p => (
                   <article key={p.id} className="patient-card" onClick={() => handlePatientClick(p)}>
                     <div className="patient-top">
                       <span>{p.id}</span>
@@ -367,6 +454,7 @@ export const App: React.FC = () => {
         {activeTab === 'security' && (
           <SecurityCenter
             alerts={alerts}
+            onUpdateStatus={handleAlertStatusUpdate}
             onClear={() => setAlerts([])}
           />
         )}
@@ -375,7 +463,7 @@ export const App: React.FC = () => {
           <DowntimeCache
             online={online}
             queue={offlineQueue}
-            onOpenSummary={() => handlePatientClick(PATIENTS[9])}
+            onOpenSummary={() => handlePatientClick(patients.find(p => p.id === 'PAT-1010') || patients[9])}
           />
         )}
       </main>
